@@ -1,0 +1,193 @@
+openapi: 3.0.3
+info:
+  title: RPCMS UGPass Signing Adapter (DRAFT)
+  version: 0.1.0
+  description: |
+    DRAFT contract for the RPCMS-side adapter around UGPass signing.
+    The upstream UGPass (NITA-U) interface, organisation onboarding and e-Seal
+    availability for NGOs are UNCONFIRMED. Production must use UGPass-issued
+    certificates for verification.
+servers:
+  - url: https://rpcms.example.org/api/v1
+security:
+  - bearerOfficer: []
+paths:
+  /mous:
+    post:
+      operationId: createMou
+      summary: Create a MoU signing workflow from a programme
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MouCreate' }
+      responses:
+        '201':
+          description: Workflow created, document hash computed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Mou' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+  /mous/{mouId}:
+    get:
+      operationId: getMou
+      parameters:
+        - { name: mouId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: MoU and signing status
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Mou' }
+        '404': { $ref: '#/components/responses/Problem' }
+  /mous/{mouId}/signing-requests:
+    post:
+      operationId: sendNextSigningRequest
+      summary: Send the next sequential signing request to the UGPass app
+      parameters:
+        - { name: mouId, in: path, required: true, schema: { type: string } }
+      responses:
+        '202':
+          description: Request sent, awaiting signatory
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SigningRequest' }
+        '409':
+          description: Previous signatory has not yet signed
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+  /mous/{mouId}/e-seals:
+    post:
+      operationId: applyOrganisationSeals
+      summary: Apply organisation e-Seals once all personal signatures are complete
+      parameters:
+        - { name: mouId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Seals applied
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Mou' }
+        '409': { $ref: '#/components/responses/Problem' }
+  /mous/{mouId}/verification:
+    get:
+      operationId: verifyMou
+      summary: Verify the signed MoU (public, used by the QR code)
+      security: []
+      parameters:
+        - { name: mouId, in: path, required: true, schema: { type: string } }
+        - name: hash
+          in: query
+          required: false
+          description: Optional document hash to compare against the signed hash.
+          schema: { type: string }
+      responses:
+        '200':
+          description: Verification result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Verification' }
+        '404': { $ref: '#/components/responses/Problem' }
+  /callbacks/ugpass:
+    post:
+      operationId: ugpassCallback
+      summary: Callback from UGPass when a signatory approves or declines
+      security:
+        - ugpassSignature: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UgpassEvent' }
+      responses:
+        '204': { description: Accepted }
+        '401': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+components:
+  securitySchemes:
+    bearerOfficer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    ugpassSignature:
+      type: apiKey
+      in: header
+      name: X-UGPass-Signature
+  responses:
+    Problem:
+      description: Error
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+  schemas:
+    Signatory:
+      type: object
+      required: [name, role, organisation, order]
+      properties:
+        name: { type: string }
+        role: { type: string }
+        organisation: { type: string }
+        order: { type: integer, minimum: 1 }
+        sealRequired: { type: boolean }
+        status:
+          type: string
+          enum: [WAITING, REQUEST_SENT, SIGNED, DECLINED, EXPIRED]
+    MouCreate:
+      type: object
+      required: [programmeId, reference, signatories]
+      properties:
+        programmeId: { type: string }
+        reference: { type: string, example: OPM/DoR/NHU/2026/014 }
+        ampRecordId: { type: string, example: AMP-UG-2026-00731 }
+        signatories:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/Signatory' }
+    Mou:
+      type: object
+      properties:
+        mouId: { type: string }
+        reference: { type: string }
+        documentHashSha256: { type: string }
+        status:
+          type: string
+          enum: [DRAFT, SIGNING, SIGNED_AWAITING_SEALS, COMPLETE, VOID]
+        signatories:
+          type: array
+          items: { $ref: '#/components/schemas/Signatory' }
+        verificationUrl: { type: string, format: uri }
+    SigningRequest:
+      type: object
+      properties:
+        requestId: { type: string }
+        signatoryName: { type: string }
+        sentAt: { type: string, format: date-time }
+    UgpassEvent:
+      type: object
+      required: [requestId, outcome]
+      properties:
+        requestId: { type: string }
+        outcome: { type: string, enum: [APPROVED, DECLINED, EXPIRED] }
+        certificateRef: { type: string }
+        signedAt: { type: string, format: date-time }
+    Verification:
+      type: object
+      properties:
+        valid: { type: boolean }
+        documentUnchanged:
+          type: boolean
+          nullable: true
+          description: null when no hash was supplied to compare
+        verifiedSigners: { type: integer }
+        verifiedSeals: { type: integer }
+        checkedAt: { type: string, format: date-time }
+    Problem:
+      type: object
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
