@@ -26,11 +26,20 @@ uvicorn --factory rpcms_ugpass.api:create_app
 pytest
 ```
 
+## Database migrations
+Schema changes are managed with Alembic (`migrations/`, initial revision `0001`). For anything beyond local development:
+```
+pip install -e ".[postgres]"
+export RPCMS_UGPASS_DATABASE_URL=postgresql+psycopg://user:pass@host/db  RPCMS_UGPASS_CREATE_TABLES=false
+alembic upgrade head
+```
+`RPCMS_UGPASS_CREATE_TABLES` defaults to `true` (tables auto-created at startup, for development and tests); set it to `false` where Alembic owns the schema. A test checks that the migrations produce exactly the model schema. To run the suite against a migrated Postgres: `RPCMS_TEST_DATABASE_URL=... pytest` (it truncates the tables between tests, so use a throwaway database).
+
 ## Known limits (read before relying on this)
 - **Nothing here talks to UGPass.** The UGPass interface, NGO/organisation onboarding and e-Seal availability are unconfirmed; only `MockUgpassClient` exists and it signs nothing.
 - **The callback signature scheme (HMAC-SHA256 of the raw body, `X-UGPass-Signature`) is an assumption.** Replace `verify_callback` with whatever UGPass really uses.
 - **`/verification` checks RPCMS's own records only.** It does not validate UGPass certificates or seals cryptographically, so it is not legal proof of a valid signature.
 - The hash covers a canonical JSON of the MoU terms, not a rendered PDF. If signatures must cover a PDF, hash that file.
-- Tables are created at startup with no migrations; use Alembic and PostgreSQL before production. Sequencing relies on one DB transaction per call and has not been load-tested for concurrency.
+- Migrations exist for the current schema only (one initial revision), verified on PostgreSQL 16 locally (upgrade, downgrade, full test suite) but not on other versions. Sequencing relies on one DB transaction per call and has not been load-tested for concurrency.
 - Officer tokens carry no role or partner checks yet: any valid officer can drive any MoU.
 - The 404/409 on the callback and the nullable `documentUnchanged` were added to the contract after the first draft.

@@ -62,7 +62,8 @@ def create_app(settings: Settings | None = None, client: UgpassClient | None = N
     if settings.database_url.startswith("sqlite") and ":memory:" in settings.database_url:
         kwargs = {"connect_args": {"check_same_thread": False}, "poolclass": StaticPool}
     engine = create_engine(settings.database_url, **kwargs)
-    Base.metadata.create_all(engine)  # no migrations yet: see README
+    if settings.create_tables:
+        Base.metadata.create_all(engine)  # dev/tests only; production uses Alembic (see README)
     Session_ = sessionmaker(engine, expire_on_commit=False)
     app = FastAPI(title="RPCMS UGPass signing adapter", version="0.1.0")
 

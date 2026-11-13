@@ -104,7 +104,7 @@ def test_officer_auth_required(client):
 
 
 def test_seal_upstream_failure_returns_502_and_keeps_state():
-    c = TestClient(create_app(Settings(jwt_key=KEY, callback_secret=SECRET, database_url="sqlite:///:memory:")))
+    c = TestClient(create_app(Settings(jwt_key=KEY, callback_secret=SECRET, database_url="sqlite:///:memory:", create_tables=True)))
     mid = create(c, orgs=("OPM", "DoR-NOSEAL"))["mouId"]
     sign_all(c, mid, 2)
     assert c.post(f"/api/v1/mous/{mid}/e-seals", headers=auth()).status_code == 502

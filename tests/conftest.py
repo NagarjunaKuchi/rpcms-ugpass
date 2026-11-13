@@ -1,3 +1,4 @@
+import os
 import hashlib
 import hmac
 import json
@@ -16,7 +17,7 @@ SECRET = "callback-secret-0123456789"
 
 @pytest.fixture
 def client():
-    s = Settings(jwt_key=KEY, callback_secret=SECRET, database_url="sqlite:///:memory:")
+    s = Settings(jwt_key=KEY, callback_secret=SECRET, database_url=os.environ.get("RPCMS_TEST_DATABASE_URL", "sqlite:///:memory:"), create_tables="RPCMS_TEST_DATABASE_URL" not in os.environ)
     return TestClient(create_app(s))
 
 
@@ -36,3 +37,15 @@ def callback(client, request_id, outcome="APPROVED", secret=SECRET, extra=None):
     sig = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
     return client.post("/api/v1/callbacks/ugpass", content=body,
                        headers={"X-UGPass-Signature": sig, "Content-Type": "application/json"})
+
+
+@pytest.fixture(autouse=True)
+def _clean_external_db():
+    """With RPCMS_TEST_DATABASE_URL set (a throwaway Postgres already migrated with `alembic upgrade head`),
+    empty the tables between tests. In-memory SQLite (default) needs nothing."""
+    url = os.environ.get("RPCMS_TEST_DATABASE_URL")
+    if url:
+        from sqlalchemy import create_engine, text
+        with create_engine(url).begin() as c:
+            c.execute(text("TRUNCATE mou, seal, signatory RESTART IDENTITY CASCADE"))
+    yield

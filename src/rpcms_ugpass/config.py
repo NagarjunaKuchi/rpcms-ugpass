@@ -16,5 +16,7 @@ class Settings(BaseSettings):
     callback_secret: str = Field(min_length=16)
 
     database_url: str = "sqlite:///./rpcms_ugpass.db"
+    # True (default, dev/tests): create tables at startup. Set False in production and run `alembic upgrade head`.
+    create_tables: bool = True
     public_base_url: str = "https://rpcms.example.org"
     client_impl: str = "rpcms_ugpass.upstream.MockUgpassClient"
