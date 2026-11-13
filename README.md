@@ -41,5 +41,5 @@ alembic upgrade head
 - **`/verification` checks RPCMS's own records only.** It does not validate UGPass certificates or seals cryptographically, so it is not legal proof of a valid signature.
 - The hash covers a canonical JSON of the MoU terms, not a rendered PDF. If signatures must cover a PDF, hash that file.
 - Migrations exist for the current schema only (one initial revision), verified on PostgreSQL 16 locally (upgrade, downgrade, full test suite) but not on other versions. Sequencing relies on one DB transaction per call and has not been load-tested for concurrency.
-- Officer tokens carry no role or partner checks yet: any valid officer can drive any MoU.
+- **Access:** creating an MoU, sending signing requests and applying e-seals need the role in `RPCMS_UGPASS_COORDINATOR_ROLE` (default `mou-admin`) in the JWT `roles` claim (403 otherwise); any valid officer can read an MoU, and the verification endpoint is public. MoUs have no owner partner: any coordinator can drive any MoU. The `roles` claim name and format are an assumption about the token issuer.
 - The 404/409 on the callback and the nullable `documentUnchanged` were added to the contract after the first draft.

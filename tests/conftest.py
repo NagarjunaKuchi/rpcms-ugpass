@@ -21,9 +21,16 @@ def client():
     return TestClient(create_app(s))
 
 
-def auth():
-    t = jwt.encode({"sub": "off-1", "exp": int(time.time()) + 300}, KEY, algorithm="HS256")
+def auth(roles=None):
+    claims = {"sub": "off-1", "exp": int(time.time()) + 300}
+    if roles:
+        claims["roles"] = roles
+    t = jwt.encode(claims, KEY, algorithm="HS256")
     return {"Authorization": f"Bearer {t}"}
+
+
+def admin():
+    return auth(["mou-admin"])
 
 
 def mou_body(ref="OPM/DoR/NHU/2026/014", seal=True, orgs=("OPM", "DoR", "NHU")):

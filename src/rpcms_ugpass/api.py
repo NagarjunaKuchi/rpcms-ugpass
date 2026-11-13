@@ -71,7 +71,7 @@ def create_app(settings: Settings | None = None, client: UgpassClient | None = N
         with Session_() as s:
             yield s
 
-    def officer(authorization: str | None = Header(default=None)) -> str:
+    def claims(authorization: str | None = Header(default=None)) -> dict:
         if not authorization or not authorization.lower().startswith("bearer "):
             raise WorkflowError(401, "Missing bearer token")
         try:
@@ -80,6 +80,15 @@ def create_app(settings: Settings | None = None, client: UgpassClient | None = N
                            options={"require": ["sub", "exp"], "verify_aud": settings.jwt_audience is not None})
         except jwt.PyJWTError:
             raise WorkflowError(401, "Invalid token")
+        return c
+
+    def officer(c: dict = Depends(claims)) -> str:
+        return c["sub"]
+
+    def coordinator(c: dict = Depends(claims)) -> str:
+        roles = c.get("roles") or []
+        if settings.coordinator_role not in (roles if isinstance(roles, list) else [roles]):
+            raise WorkflowError(403, "Coordinator role required")
         return c["sub"]
 
     @app.exception_handler(WorkflowError)
@@ -99,7 +108,7 @@ def create_app(settings: Settings | None = None, client: UgpassClient | None = N
         return {"status": "ok"}
 
     @app.post("/api/v1/mous", status_code=201)
-    def create(req: MouCreate, _: str = Depends(officer), s: Session = Depends(db)):
+    def create(req: MouCreate, _: str = Depends(coordinator), s: Session = Depends(db)):
         return mou_view(service.create_mou(s, req), settings.public_base_url)
 
     @app.get("/api/v1/mous/{mou_id}")
@@ -107,12 +116,12 @@ def create_app(settings: Settings | None = None, client: UgpassClient | None = N
         return mou_view(service.get_mou(s, mou_id), settings.public_base_url)
 
     @app.post("/api/v1/mous/{mou_id}/signing-requests", status_code=202)
-    def send_next(mou_id: str, _: str = Depends(officer), s: Session = Depends(db)):
+    def send_next(mou_id: str, _: str = Depends(coordinator), s: Session = Depends(db)):
         sig = service.send_next_request(s, client, mou_id)
         return {"requestId": sig.request_id, "signatoryName": sig.name, "sentAt": sig.sent_at.isoformat()}
 
     @app.post("/api/v1/mous/{mou_id}/e-seals")
-    def seal(mou_id: str, _: str = Depends(officer), s: Session = Depends(db)):
+    def seal(mou_id: str, _: str = Depends(coordinator), s: Session = Depends(db)):
         return mou_view(service.apply_seals(s, client, mou_id), settings.public_base_url)
 
     @app.get("/api/v1/mous/{mou_id}/verification")  # public: opened from the QR code

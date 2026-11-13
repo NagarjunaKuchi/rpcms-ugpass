@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     jwt_key: str = Field(min_length=16)
     jwt_algorithm: str = "HS256"
     jwt_audience: str | None = None
+    # Role (string in the JWT 'roles' claim) allowed to create MoUs and drive signing / e-seals.
+    # Any other valid officer token is read-only. The claim name and format are an assumption.
+    coordinator_role: str = "mou-admin"
 
     # Shared secret for HMAC-SHA256 over the raw callback body. ASSUMED scheme: confirm what
     # UGPass actually uses to authenticate callbacks and replace verify_callback if different.
